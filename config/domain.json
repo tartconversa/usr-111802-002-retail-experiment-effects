@@ -1,0 +1,9 @@
+{
+  "name": "零售促销实验",
+  "event_kinds": [
+    "assignment",
+    "touch",
+    "order",
+    "return"
+  ]
+}
