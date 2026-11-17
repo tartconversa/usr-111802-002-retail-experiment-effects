@@ -7,6 +7,7 @@ from .identity import EntityDirectory
 from .metrics import Metrics
 from .decisions import DecisionBook
 from .domain import ExperimentRoster
+from .experiment import ExperimentAnalysis, ExperimentPlan
 
 class AnalyticsService:
     def __init__(self, database, config_path=None):
@@ -21,6 +22,8 @@ class AnalyticsService:
         self.metrics = Metrics(self.store, self.entities)
         self.decisions = DecisionBook(self.connection)
         self.domain = ExperimentRoster(self.connection)
+        self.experiments = ExperimentPlan(self.connection)
+        self.analysis = ExperimentAnalysis(self.store, self.entities, self.experiments)
         self.connection.commit()
 
     def close(self):
@@ -45,3 +48,24 @@ class AnalyticsService:
         body = {"as_of": as_of, "summary": self.summary(as_of)}
         with self.connection:
             return self.decisions.publish(report_id, created_at, title, body)
+
+    def plan(self, experiment, revision, recorded_at, stores):
+        """登记或纠正一份门店入组计划。"""
+        with self.connection:
+            return self.experiments.record(experiment, revision, recorded_at, stores)
+
+    def analyze(self, experiment, start, end, as_of=None, attribution=None):
+        """按计划分组、实际触达、订单与退货给出实验分析。"""
+        return self.analysis.analyze(experiment, start, end, as_of, attribution)
+
+    def publish_analysis(self, report_id, created_at, title, experiment, start, end,
+                         as_of=None, attribution=None):
+        """把当时可用的数据与分析口径一并留档。"""
+        analysis = self.analyze(experiment, start, end, as_of, attribution)
+        body = {"kind": "experiment-analysis", "analysis": analysis}
+        with self.connection:
+            return self.decisions.publish(report_id, created_at, title, body)
+
+    def reconcile(self, report_id):
+        """按当前数据与同一口径重算，并与历史快照逐项对比。"""
+        return self.analysis.reconcile(self.decisions, report_id)
